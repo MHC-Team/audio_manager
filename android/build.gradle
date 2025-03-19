@@ -23,7 +23,7 @@ apply plugin: 'com.android.library'
 
 android {
     namespace 'cc.dync.audio_manager' // Add this line
-    compileSdkVersion 28
+    compileSdkVersion 34
 
     defaultConfig {
         minSdkVersion 23
