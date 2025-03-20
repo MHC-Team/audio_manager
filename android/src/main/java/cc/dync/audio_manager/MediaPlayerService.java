@@ -96,7 +96,7 @@ public class MediaPlayerService extends Service {
     /// 通知事件处理，只能加载一次，否则会重复
     public static void registerReceiver(Context context) {
         MediaPlayerService.context = context;
-        // 注册广播
+
         BroadcastReceiver playerReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
@@ -108,7 +108,7 @@ public class MediaPlayerService extends Service {
                     case ACTION_PREVIOUS:
                         serviceEvents.onEvents(Events.previous);
                         break;
-                    case ACTION_PLAY_OR_PAUSE:// 暂停/播放
+                    case ACTION_PLAY_OR_PAUSE:
                         serviceEvents.onEvents(Events.playOrPause);
                         break;
                     case ACTION_STOP:
@@ -117,13 +117,22 @@ public class MediaPlayerService extends Service {
                 }
             }
         };
+
         IntentFilter intentFilter = new IntentFilter();
         intentFilter.addAction(ACTION_NEXT);
         intentFilter.addAction(ACTION_PREVIOUS);
         intentFilter.addAction(ACTION_PLAY_OR_PAUSE);
         intentFilter.addAction(ACTION_STOP);
-        context.registerReceiver(playerReceiver, intentFilter);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // اندروید ۱۳ یا بالاتر: باید یکی از حالت‌های EXPORT تعیین شود
+            context.registerReceiver(playerReceiver, intentFilter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            // نسخه‌های قدیمی‌تر: روش معمولی
+            context.registerReceiver(playerReceiver, intentFilter);
+        }
     }
+
 
     // 解除绑定
     public static void unBind(Context context) {
@@ -170,89 +179,78 @@ public class MediaPlayerService extends Service {
     private NotificationCompat.Builder builder;
     private RemoteViews views;
 
-    private void setupNotification() {
-        // 设置点击通知结果
-//        Intent intent = new Intent("android.flutter.audio_manager.activity");
-        PendingIntent cpi;
-        Intent intent = new Intent(this, AudioManagerPlugin.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-        PendingIntent contentPendingIntent = PendingIntent.getActivity(this, 1023, intent, PendingIntent.FLAG_UPDATE_CURRENT | 67108864);
-        views = new RemoteViews(getPackageName(), R.layout.layout_mediaplayer);
-        cpi=contentPendingIntent;
-        }else{
-        PendingIntent contentPendingIntent = PendingIntent.getActivity(this, 1023, intent, PendingIntent.FLAG_UPDATE_CURRENT);
-        views = new RemoteViews(getPackageName(), R.layout.layout_mediaplayer);
-        cpi=contentPendingIntent;
+ private void setupNotification() {
+    // Intent اصلی (Explicit)
+    Intent intent = new Intent(this, AudioManagerPlugin.class);
+    PendingIntent cpi;
+    
+    // فلگ‌های PendingIntent
+    int contentFlags = PendingIntent.FLAG_UPDATE_CURRENT;
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        contentFlags |= PendingIntent.FLAG_IMMUTABLE;
+    }
+    cpi = PendingIntent.getActivity(this, 1023, intent, contentFlags);
+    
+    views = new RemoteViews(getPackageName(), R.layout.layout_mediaplayer);
 
-        }
-        // 自定义布局
-        // 下一首
-        Intent intentNext = new Intent(ACTION_NEXT);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-        PendingIntent nextPendingIntent = PendingIntent.getBroadcast(this, 1024, intentNext, PendingIntent.FLAG_CANCEL_CURRENT | 33554432);
-        views.setOnClickPendingIntent(R.id.iv_next, nextPendingIntent);
-        
-        }else{
-        PendingIntent nextPendingIntent = PendingIntent.getBroadcast(this, 1024, intentNext, PendingIntent.FLAG_CANCEL_CURRENT);
-        views.setOnClickPendingIntent(R.id.iv_next, nextPendingIntent);
+    // دکمه بعدی
+    Intent intentNext = new Intent(ACTION_NEXT);
+    intentNext.setPackage(getPackageName()); // Explicit برای Broadcast درون برنامه
+    int nextFlags = PendingIntent.FLAG_CANCEL_CURRENT;
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        nextFlags |= PendingIntent.FLAG_IMMUTABLE;
+    }
+    PendingIntent nextPendingIntent = PendingIntent.getBroadcast(this, 1024, intentNext, nextFlags);
+    views.setOnClickPendingIntent(R.id.iv_next, nextPendingIntent);
 
-        }
-        
+    // دکمه پخش/مکث
+    Intent intentPlay = new Intent(ACTION_PLAY_OR_PAUSE);
+    intentPlay.setPackage(getPackageName());
+    int playFlags = PendingIntent.FLAG_CANCEL_CURRENT;
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        playFlags |= PendingIntent.FLAG_IMMUTABLE;
+    }
+    PendingIntent playPendingIntent = PendingIntent.getBroadcast(this, 1025, intentPlay, playFlags);
+    views.setOnClickPendingIntent(R.id.iv_pause, playPendingIntent);
 
-        // 暂停/播放
-        Intent intentPlay = new Intent(ACTION_PLAY_OR_PAUSE);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-        PendingIntent playPendingIntent = PendingIntent.getBroadcast(this, 1025, intentPlay, PendingIntent.FLAG_CANCEL_CURRENT | 33554432);
-        views.setOnClickPendingIntent(R.id.iv_pause, playPendingIntent);
+    // دکمه توقف
+    Intent intentStop = new Intent(ACTION_STOP);
+    intentStop.setPackage(getPackageName());
+    int stopFlags = PendingIntent.FLAG_CANCEL_CURRENT;
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        stopFlags |= PendingIntent.FLAG_IMMUTABLE;
+    }
+    PendingIntent stopPendingIntent = PendingIntent.getBroadcast(this, 1026, intentStop, stopFlags);
+    views.setOnClickPendingIntent(R.id.iv_cancel, stopPendingIntent);
 
-        }else{
-        PendingIntent playPendingIntent = PendingIntent.getBroadcast(this, 1025, intentPlay, PendingIntent.FLAG_CANCEL_CURRENT);
-        views.setOnClickPendingIntent(R.id.iv_pause, playPendingIntent);
+    // ساخت Notification
+    builder = new NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher)
+            .setContentTitle("")
+            .setContentText("")
+            .setAutoCancel(false)
+            .setContentIntent(cpi)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC) // اینجا NotificationCompat استفاده شده
+            .setContent(views);
 
-        }
-        
+    // ایجاد کانال Notification (برای API 26+)
+    notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        NotificationChannel channel = new NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                "Notification display",
+                NotificationManager.IMPORTANCE_LOW
+        );
+        notificationManager.createNotificationChannel(channel);
+    }
 
-        // 停止
-        Intent intentStop = new Intent(ACTION_STOP);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-        PendingIntent stopPendingIntent = PendingIntent.getBroadcast(this, 1026, intentStop, PendingIntent.FLAG_CANCEL_CURRENT | 33554432);
-        views.setOnClickPendingIntent(R.id.iv_cancel, stopPendingIntent);
-
-            }else{
-        PendingIntent stopPendingIntent = PendingIntent.getBroadcast(this, 1026, intentStop, PendingIntent.FLAG_CANCEL_CURRENT);
-        views.setOnClickPendingIntent(R.id.iv_cancel, stopPendingIntent);
-
-        }
-        
-
-        builder = new NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-                // 设置状态栏小图标
-                .setSmallIcon(R.drawable.ic_launcher)
-                // 设置标题
-                .setContentTitle("")
-                // 设置内容
-                .setContentText("")
-                // 点击通知后自动清除
-                .setAutoCancel(false)
-                // 设置点击通知效果
-                .setContentIntent(cpi)
-                // 设置删除时候出发的动作
-//                .setDeleteIntent(delPendingIntent)
-                // 自定义视图
-                .setContent(views);
-
-        // 获取NotificationManager实例
-        notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel notificationChannel;
-            notificationChannel = new NotificationChannel(NOTIFICATION_CHANNEL_ID,
-                    "Notification display", NotificationManager.IMPORTANCE_LOW);
-            notificationManager.createNotificationChannel(notificationChannel);
-        }
-
-        // 前台服务
+    // شروع سرویس پیش‌زمینه
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        startForeground(NOTIFICATION_PENDING_ID, builder.build(), 2);
+    } else {
         startForeground(NOTIFICATION_PENDING_ID, builder.build());
     }
+}
 
     void updateCover(Bitmap bitmap) {
         views.setImageViewBitmap(R.id.image, bitmap);

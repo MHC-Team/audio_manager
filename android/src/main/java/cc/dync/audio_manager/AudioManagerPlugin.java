@@ -47,7 +47,9 @@ public class AudioManagerPlugin implements FlutterPlugin, MethodCallHandler, Vol
         final MethodChannel channel = new MethodChannel(flutterPluginBinding.getBinaryMessenger(), "audio_manager");
 
         channel.setMethodCallHandler(getInstance());
+        Log.e("AudioManagerPlugin", "onAttachedToEngine !!!!!!!");
         setup(flutterPluginBinding.getApplicationContext(), channel);
+          Log.e("AudioManagerPlugin", "Afther Setup !!!!!!!");
         AudioManagerPlugin.flutterAssets = flutterPluginBinding.getFlutterAssets();
     }
 
@@ -65,28 +67,39 @@ public class AudioManagerPlugin implements FlutterPlugin, MethodCallHandler, Vol
     // depending on the user's project. onAttachedToEngine or registerWith must both
     // be defined
     // in the same class.
-    public static void registerWith(Registrar registrar) {
-        MethodChannel channel = new MethodChannel(registrar.messenger(), "audio_manager");
-
-        channel.setMethodCallHandler(getInstance());
-        instance.setup(registrar.context(), channel);
-        AudioManagerPlugin.registrar = registrar;
-    }
+     public static void registerWith(Registrar registrar) {
+         MethodChannel channel = new MethodChannel(registrar.messenger(), "audio_manager");
+         Log.e("AudioManagerPlugin", "registerWith !!!!!!!");
+         channel.setMethodCallHandler(getInstance());
+         instance.setup(registrar.context(), channel);
+         AudioManagerPlugin.registrar = registrar;
+     }
 
     private void setup(Context context, MethodChannel channel) {
-        instance.context = context;
-        instance.channel = channel;
+ 
 
-        instance.helper = MediaPlayerHelper.getInstance(instance.context);
-        setupPlayer();
-        volumeChangeObserver = new VolumeChangeObserver(instance.context);
-        volumeChangeObserver.setVolumeChangeListener(instance);
-        volumeChangeObserver.registerReceiver();
-    }
+    instance.context = context;
+    instance.channel = channel;
+    Log.e("AudioManagerPlugin", "Setup Calling !!!!!!!");
+    // Initialize MediaPlayerHelper
+    instance.helper = MediaPlayerHelper.getInstance(instance.context);
+   
+    setupPlayer(channel);
 
-    private void setupPlayer() {
-        MediaPlayerHelper helper = instance.helper;
-        MethodChannel channel = instance.channel;
+    // Initialize VolumeChangeObserver
+    instance.volumeChangeObserver = new VolumeChangeObserver(instance.context);
+
+
+
+    instance.volumeChangeObserver.setVolumeChangeListener(instance);
+    instance.volumeChangeObserver.registerReceiver();
+}
+
+    private void setupPlayer(MethodChannel channel) {
+        MediaPlayerHelper helper = MediaPlayerHelper.getInstance(instance.context);
+        //MethodChannel channel = channel;
+        Log.e("AudioManagerPlugin", "channel:" + channel);
+         Log.e("AudioManagerPlugin", "instance:" + instance);
 
         helper.setOnStatusCallbackListener((status, args) -> {
             Log.v(TAG, "--" + status.toString());
@@ -144,7 +157,12 @@ public class AudioManagerPlugin implements FlutterPlugin, MethodCallHandler, Vol
 
     @Override
     public void onMethodCall(@NonNull MethodCall call, @NonNull Result result) {
-        MediaPlayerHelper helper = instance.helper;
+        MediaPlayerHelper helper =  MediaPlayerHelper.getInstance(instance.context);
+           Log.e(TAG, "!!!!!!!!!!!!!!!!! Method Called !!!!!!!!!!!!!!!!!!!");
+        if(helper == null) {
+                    Log.e(TAG, "!!!!!!!!!!!!!!! Helper is Null !!!!!!!!!!!!!");
+
+        }
         switch (call.method) {
             case "getPlatformVersion":
                 result.success("Android " + android.os.Build.VERSION.RELEASE);
@@ -185,6 +203,7 @@ public class AudioManagerPlugin implements FlutterPlugin, MethodCallHandler, Vol
                 try {
                     helper.start(info);
                 } catch (Exception e) {
+                      Log.v(TAG, "-------------" + e.getMessage());
                     result.success(e.getMessage());
                 }
                 break;
